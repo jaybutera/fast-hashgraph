@@ -154,8 +154,8 @@ impl Graph {
         }
     }
 
-    fn reachability_matrix(&self, x: EventId, y: EventId) {
-        // TODO: Is there no cleaner way to initialize this array?
+    fn reachability_matrix(&self) {//, x: EventId, y: EventId) {
+        // TODO: Is there a cleaner way to initialize this array?
         let len = self.allocator.latest_idx;
         let mut reach = Vec::with_capacity( len );
         for i in 0..len {
@@ -165,6 +165,18 @@ impl Graph {
             }
 
             reach.push(v);
+        }
+
+        // Initialize with the zero pass (immediate reachability)
+        for eid in 0..len {
+            if self.genesis[eid] { continue }
+
+            let sid = self.self_parent[eid];
+            reach[eid][sid] = true;
+
+            if let Some(oid) = self.other_parent[eid] {
+                reach[eid][oid] = true;
+            }
         }
 
         for k in 0..len {
@@ -200,6 +212,26 @@ fn main() {
 
     let id1 = g.add_event(Event::Genesis { creator: 0});
     let id2 = g.add_event(Event::Genesis { creator: 1});
+    let id3 = g.add_event(Event::Update {
+        creator: 2,
+        self_parent: id1,
+        other_parent: Some(id2),
+        txs: Some( Vec::new() ),
+    });
+    let id4 = g.add_event(Event::Update {
+        creator: 1,
+        self_parent: id2,
+        other_parent: Some(id3),
+        txs: Some( Vec::new() ),
+    });
 
-    g.reachability_matrix(id1, id2);
+    g.reachability_matrix();
 }
+
+/*
+  1 2 3 4
+1 0 0 0 0
+2 0 0 0 0
+3 1 1 0 0
+4 1 1 1 0
+*/
