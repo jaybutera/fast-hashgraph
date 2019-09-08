@@ -11,11 +11,13 @@ struct Generation<T> {
 // It's primitive right now but will be more useful when I add deletions
 struct IndexAllocator {
     latest_idx: usize,
+    size: usize,
 }
 impl IndexAllocator {
     fn allocate(&mut self) -> usize {
         let i = self.latest_idx;
         self.latest_idx += 1;
+        self.size += 1;
         i
     }
 
@@ -34,6 +36,7 @@ struct Graph {
     txs: Vec< Option<Vec<Transaction>> >,
     creator: Vec<PeerId>,
     round: Vec<u32>,
+    reachable: Vec<Vec<bool>>,
 
     // May be changed after creation so these should be private
     famous: Vec< Generation<bool> >,
@@ -70,7 +73,7 @@ impl Event {
 impl Graph {
     fn new() -> Self {
         let max = 1000;
-        let allocator = IndexAllocator{ latest_idx: 0 };
+        let allocator = IndexAllocator{ latest_idx: 0, size: 0 };
 
         let mut genesis = Vec::with_capacity(max);
         let mut self_parent = Vec::with_capacity(max);
@@ -80,6 +83,7 @@ impl Graph {
         let mut round = Vec::with_capacity(max);
         let mut famous = Vec::with_capacity(max);
         let mut witness = Vec::with_capacity(max);
+        let mut reachable = Vec::with_capacity(max);
 
         unsafe {
             genesis.set_len(max);
@@ -90,6 +94,7 @@ impl Graph {
             round.set_len(max);
             famous.set_len(max);
             witness.set_len(max);
+            reachable.set_len(max);
         }
 
         Graph {
@@ -101,6 +106,7 @@ impl Graph {
             round:        round,
             famous:       famous,
             witness:      witness,
+            reachable:    reachable,
             generation:   0,
             allocator:    allocator,
         }
@@ -124,6 +130,7 @@ impl Graph {
                 self.self_parent[eid] = self_parent;
                 self.other_parent[eid] = other_parent;
                 self.txs[eid] = txs;
+                self.reachable[eid] = reachable_event(
             }
         }
 
@@ -131,6 +138,68 @@ impl Graph {
         self.generation += 1;
 
         eid
+    }
+
+    // NOTE: This fn does not check whether the event's parents are valid and stored in the graph,
+    // may lead to a panic
+    fn reachable_events(&self, from: &[EventId]) -> Vec<bool> {
+        match e {
+            Event::Genesis => Vec::new(),
+            Event::Update{ self_parent, other_parent } => {
+                let len = self.allocator.size;
+                let reachable = Vec::with_capacity(len);
+
+                let p1_reachable = self.reachable[*self_parent];
+
+                // OR together the parent reachability lists
+                if let Some(op) = other_parent {
+                    let p2_reachable = self.reachable[*other_parent];
+
+                    for i in 0..len {
+                        let x1 = *p1_reachable.get(i).unwrap_or(&false);
+                        let x2 = *p2_reachable.get(i).unwrap_or(&false);
+
+                        reachable.push( x1 || x2 );
+                    }
+                }
+                else {
+                    for i in 0..len {
+                        let x1 = *p1_reachable.get(i).unwrap_or(&false);
+                        reachable.push( x1 );
+                    }
+                }
+
+                // Oof this is not pretty
+                /*
+                for i in 0..len {
+                    let x1 = p1_reachable.get(i).or_else(|| false);
+                    let x2 = p2_reachable.get(i).or_else(|| false);
+
+                    reachable.push( x1 || x2 );
+                    */
+
+                    /*
+                    if let Some(x1) = p1_reachable.get(i) {
+                        if let Some(x2) = p2_reachable.get(i) {
+                            reachable.push( *x1 || *x2 );
+                        }
+                        reachable.push( *x1 );
+                    }
+                    else if let Some(x2) = p2_reachable.get(i) {
+                        reachable.push( *x2 );
+                    }
+                    else {
+                        reachable.push( false );
+                    }
+                    */
+
+                // Set the parents to be reachable
+                reachable[*self_parent]  = true;
+                reachable[*other_parent] = true;
+
+                reachable
+            }
+        }
     }
 
     fn is_famous(&self, eid: EventId) -> bool {
@@ -154,7 +223,7 @@ impl Graph {
         }
     }
 
-    fn reachability_matrix(&self) {//, x: EventId, y: EventId) {
+    fn reachability_matrix(&self) -> Vec<Vec<bool>> {
         // TODO: Is there a cleaner way to initialize this array?
         let len = self.allocator.latest_idx;
         let mut reach = Vec::with_capacity( len );
@@ -187,7 +256,8 @@ impl Graph {
             }
         }
 
-        println!("{:?}", reach);
+        //println!("{:?}", reach);
+        reach
     }
 
     /*
@@ -227,6 +297,12 @@ fn main() {
 
     g.reachability_matrix();
 }
+
+// Store the reachability data as an adjacency list since it is sparse and only the lower triangle
+// is needed. Since a new event can only be added when its parents exist, no node can point to a
+// newly added event before it is added. Therefore there's no need to update any previous
+// reachability data. Only to fill out the list of the newly added event. This can be done with
+// kruskal's algorithm in O(n^2).
 
 /*
   1 2 3 4
