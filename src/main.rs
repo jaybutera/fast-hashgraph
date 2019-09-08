@@ -130,7 +130,7 @@ impl Graph {
                 self.self_parent[eid] = self_parent;
                 self.other_parent[eid] = other_parent;
                 self.txs[eid] = txs;
-                self.reachable[eid] = reachable_event(
+                self.reachable[eid] = self.reachable_events(&self_parent, &other_parent);
             }
         }
 
@@ -142,64 +142,39 @@ impl Graph {
 
     // NOTE: This fn does not check whether the event's parents are valid and stored in the graph,
     // may lead to a panic
-    fn reachable_events(&self, from: &[EventId]) -> Vec<bool> {
-        match e {
-            Event::Genesis => Vec::new(),
-            Event::Update{ self_parent, other_parent } => {
-                let len = self.allocator.size;
-                let reachable = Vec::with_capacity(len);
+    fn reachable_events(&self,
+                        self_parent: &EventId,
+                        other_parent: &Option<EventId>)-> Vec<bool>
+    {
+        let len           = self.allocator.size;
+        let mut reachable = Vec::with_capacity(len);
 
-                let p1_reachable = self.reachable[*self_parent];
+        // OR together the parent reachability lists
+        let p1_reachable = &self.reachable[*self_parent];
+        if let Some(op) = other_parent {
+            let p2_reachable = &self.reachable[*op];
 
-                // OR together the parent reachability lists
-                if let Some(op) = other_parent {
-                    let p2_reachable = self.reachable[*other_parent];
+            for i in 0..len {
+                let x1 = *p1_reachable.get(i).unwrap_or(&false);
+                let x2 = *p2_reachable.get(i).unwrap_or(&false);
 
-                    for i in 0..len {
-                        let x1 = *p1_reachable.get(i).unwrap_or(&false);
-                        let x2 = *p2_reachable.get(i).unwrap_or(&false);
-
-                        reachable.push( x1 || x2 );
-                    }
-                }
-                else {
-                    for i in 0..len {
-                        let x1 = *p1_reachable.get(i).unwrap_or(&false);
-                        reachable.push( x1 );
-                    }
-                }
-
-                // Oof this is not pretty
-                /*
-                for i in 0..len {
-                    let x1 = p1_reachable.get(i).or_else(|| false);
-                    let x2 = p2_reachable.get(i).or_else(|| false);
-
-                    reachable.push( x1 || x2 );
-                    */
-
-                    /*
-                    if let Some(x1) = p1_reachable.get(i) {
-                        if let Some(x2) = p2_reachable.get(i) {
-                            reachable.push( *x1 || *x2 );
-                        }
-                        reachable.push( *x1 );
-                    }
-                    else if let Some(x2) = p2_reachable.get(i) {
-                        reachable.push( *x2 );
-                    }
-                    else {
-                        reachable.push( false );
-                    }
-                    */
-
-                // Set the parents to be reachable
-                reachable[*self_parent]  = true;
-                reachable[*other_parent] = true;
-
-                reachable
+                reachable.push( x1 || x2 );
             }
         }
+        else {
+            for i in 0..len {
+                let x1 = *p1_reachable.get(i).unwrap_or(&false);
+                reachable.push( x1 );
+            }
+        }
+
+        // Set the parents to be reachable
+        reachable[*self_parent]  = true;
+        if let Some(op) = other_parent {
+            reachable[*op] = true;
+        }
+
+        reachable
     }
 
     fn is_famous(&self, eid: EventId) -> bool {
@@ -227,7 +202,7 @@ impl Graph {
         // TODO: Is there a cleaner way to initialize this array?
         let len = self.allocator.latest_idx;
         let mut reach = Vec::with_capacity( len );
-        for i in 0..len {
+        for _ in 0..len {
             let mut v = Vec::with_capacity( len );
             for _ in 0..len {
                 v.push(false);
