@@ -18,6 +18,12 @@ impl IndexAllocator {
         self.latest_idx += 1;
         i
     }
+
+    /*
+    fn peek(&self) -> usize {
+        self.latest_idx
+    }
+    */
 }
 
 struct Graph {
@@ -65,6 +71,7 @@ impl Graph {
     fn new() -> Self {
         let max = 1000;
         let allocator = IndexAllocator{ latest_idx: 0 };
+
         let mut genesis = Vec::with_capacity(max);
         let mut self_parent = Vec::with_capacity(max);
         let mut other_parent = Vec::with_capacity(max);
@@ -86,14 +93,14 @@ impl Graph {
         }
 
         Graph {
-            genesis:      genesis,//Vec::with_capacity(max),
-            self_parent:  self_parent,//Vec::with_capacity(max),
-            other_parent: other_parent,//Vec::with_capacity(max),
-            txs:          txs,//Vec::with_capacity(max),
-            creator:      creator,//Vec::with_capacity(max),
-            round:        round,//Vec::with_capacity(max),
-            famous:       famous,//Vec::with_capacity(max),
-            witness:      witness,//Vec::with_capacity(max),
+            genesis:      genesis,
+            self_parent:  self_parent,
+            other_parent: other_parent,
+            txs:          txs,
+            creator:      creator,
+            round:        round,
+            famous:       famous,
+            witness:      witness,
             generation:   0,
             allocator:    allocator,
         }
@@ -109,7 +116,6 @@ impl Graph {
 
         match e {
             Event::Genesis{ creator } => {
-                println!("Len: {}", self.genesis.len());
                 self.genesis[eid] = true;
                 self.creator[eid] = creator;
             },
@@ -148,6 +154,30 @@ impl Graph {
         }
     }
 
+    fn reachability_matrix(&self, x: EventId, y: EventId) {
+        // TODO: Is there no cleaner way to initialize this array?
+        let len = self.allocator.latest_idx;
+        let mut reach = Vec::with_capacity( len );
+        for i in 0..len {
+            let mut v = Vec::with_capacity( len );
+            for _ in 0..len {
+                v.push(false);
+            }
+
+            reach.push(v);
+        }
+
+        for k in 0..len {
+            for i in 0..len {
+                for j in 0..len {
+                    reach[i][j] = reach[i][j] || ( reach[i][k] && reach[k][j] );
+                }
+            }
+        }
+
+        println!("{:?}", reach);
+    }
+
     /*
     fn determine_famous(&self, eid: EventId) -> bool {
         // TODO: Filter all events to only those with round >= eid's round
@@ -168,6 +198,8 @@ impl Graph {
 fn main() {
     let mut g = Graph::new();
 
-    let e = Event::Genesis { creator: 0 };
-    g.add_event(e);
+    let id1 = g.add_event(Event::Genesis { creator: 0});
+    let id2 = g.add_event(Event::Genesis { creator: 1});
+
+    g.reachability_matrix(id1, id2);
 }
