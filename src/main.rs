@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 type EventId = usize;
 type PeerId = usize;
 type Transaction = u32;
@@ -37,14 +39,16 @@ struct Graph {
     creator: Vec<PeerId>,
     round: Vec<u32>,
     reachable: Vec<Vec<bool>>,
+    witness: Vec<bool>,
 
     // May be changed after creation so these should be private
     famous: Vec< Generation<bool> >,
-    witness: Vec< Generation<bool> >,
 
-    // Internal tracking of update generations
+    // Tools for internal tracking and optimization
     generation: usize,
+    latest_round: u32,
     allocator: IndexAllocator,
+    validators: HashSet<PeerId>,
 }
 
 //#[derive(Serialize, Deserialize, Clone)] // Clone is temporary for graph unit tests
@@ -109,6 +113,8 @@ impl Graph {
             reachable:    reachable,
             generation:   0,
             allocator:    allocator,
+            latest_round: 0,
+            validators:   HashSet::new(),
         }
     }
 
@@ -123,14 +129,23 @@ impl Graph {
         match e {
             Event::Genesis{ creator } => {
                 self.genesis[eid] = true;
+                self.witness[eid] = true;
                 self.creator[eid] = creator;
+                self.round[eid]   = self.latest_round;
+                self.validators.insert( creator );
             },
             Event::Update{ creator, self_parent, other_parent, txs } => {
-                self.creator[eid] = creator;
-                self.self_parent[eid] = self_parent;
+                self.creator[eid]      = creator;
+                self.self_parent[eid]  = self_parent;
                 self.other_parent[eid] = other_parent;
-                self.txs[eid] = txs;
-                self.reachable[eid] = self.reachable_events(&self_parent, &other_parent);
+                self.txs[eid]          = txs;
+                self.reachable[eid]    = self.reachable_from(&self_parent, &other_parent);
+                // TODO: Set round with a fn
+                self.round[eid]        = self.latest_round;
+                self.validators.insert( creator );
+
+                // Important that this is called after reachable is set
+                self.witness[eid] = self.is_witness(&eid);
             }
         }
 
@@ -142,9 +157,9 @@ impl Graph {
 
     // NOTE: This fn does not check whether the event's parents are valid and stored in the graph,
     // may lead to a panic
-    fn reachable_events(&self,
+    fn reachable_from(&self,
                         self_parent: &EventId,
-                        other_parent: &Option<EventId>)-> Vec<bool>
+                        other_parent: &Option<EventId>) -> Vec<bool>
     {
         let len           = self.allocator.size;
         let mut reachable = Vec::with_capacity(len);
@@ -175,6 +190,46 @@ impl Graph {
         }
 
         reachable
+    }
+
+    fn is_witness(&self, eid: &EventId) -> bool {
+        let mut validators = HashSet::new();
+
+        // TODO: Right now these are not by unique (multiple witnesses to 1 validator possible)
+        self.witness.iter()
+            .filter(|x| **x == true)
+            .enumerate()
+            .map(|(i,_)| i)
+            //.map(|(i,_)| {println!("{}",i); i})
+            //.filter(|i| self.round[*i] >= self.latest_round-1 )
+            .for_each(|w_id| {
+                println!("witness id: {}", w_id);
+                if self.strongly_sees(eid, &w_id) {
+                    validators.insert( self.creator[w_id] );
+                }
+            });
+
+        // TODO: Optimize this for data locality
+        // For each event eid can see, check if that event can see a witness
+        validators.len() >= ( 2/3 * self.validators.len() )
+    }
+
+    fn strongly_sees(&self, from: &EventId, to: &EventId) -> bool {
+        let reachable = &self.reachable[*from];
+        let mut validators = HashSet::new();
+
+        reachable.iter()
+            .filter(|x| **x == true)
+            .enumerate()
+            .for_each(|(i, _)| {
+                let reach_from_i = *self.reachable[i].get(*to).unwrap_or(&false);
+
+                if reach_from_i {
+                    validators.insert( self.creator[i] );
+                }
+            });
+
+        validators.len() >= ( 2/3 * self.validators.len() )
     }
 
     fn is_famous(&self, eid: EventId) -> bool {
