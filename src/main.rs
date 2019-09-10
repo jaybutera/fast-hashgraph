@@ -140,12 +140,28 @@ impl Graph {
                 self.other_parent[eid] = other_parent;
                 self.txs[eid]          = txs;
                 self.reachable[eid]    = self.reachable_from(&self_parent, &other_parent);
-                // TODO: Set round with a fn
-                self.round[eid]        = self.latest_round;
                 self.validators.insert( creator );
 
                 // Important that this is called after reachable is set
                 self.witness[eid] = self.is_witness(&eid);
+                //println!("{} witness status: {}", eid, self.is_witness(&eid));
+
+                // Get max round of parents
+                let r = match other_parent {
+                    Some(op) => std::cmp::max(self.round[self_parent],
+                                              self.round[op]),
+                    None => self.round[self_parent],
+                };
+
+                // eid round is r+1 if its a witness
+                if self.is_witness(&eid) {
+                    self.round[eid] = r + 1;
+                    self.witness[eid] = true;
+                }
+                else {
+                    self.round[eid] = r;
+                    self.witness[eid] = false;
+                }
             }
         }
 
@@ -203,7 +219,7 @@ impl Graph {
             //.map(|(i,_)| {println!("{}",i); i})
             //.filter(|i| self.round[*i] >= self.latest_round-1 )
             .for_each(|w_id| {
-                println!("witness id: {}", w_id);
+                //println!("witness id: {}", w_id);
                 if self.strongly_sees(eid, &w_id) {
                     validators.insert( self.creator[w_id] );
                 }
@@ -310,22 +326,33 @@ impl Graph {
 fn main() {
     let mut g = Graph::new();
 
+    /*
     let id1 = g.add_event(Event::Genesis { creator: 0});
     let id2 = g.add_event(Event::Genesis { creator: 1});
-    let id3 = g.add_event(Event::Update {
-        creator: 2,
+    let id3 = g.add_event(Event::Genesis { creator: 2});
+    let id4 = g.add_event(Event::Update {
+        creator: 1,
         self_parent: id1,
         other_parent: Some(id2),
         txs: Some( Vec::new() ),
     });
-    let id4 = g.add_event(Event::Update {
-        creator: 1,
+    let id5 = g.add_event(Event::Update {
+        creator: 0,
         self_parent: id2,
         other_parent: Some(id3),
         txs: Some( Vec::new() ),
     });
+    let id6 = g.add_event(Event::Update {
+        creator: 2,
+        self_parent: id4,
+        other_parent: Some(id3),
+        txs: Some( Vec::new() ),
+    });
+    */
 
     g.reachability_matrix();
+
+    random_walk();
 }
 
 // Store the reachability data as an adjacency list since it is sparse and only the lower triangle
@@ -341,3 +368,33 @@ fn main() {
 3 1 1 0 0
 4 1 1 1 0
 */
+
+    // Create a single graph as a random walk of events from one creator to the next
+    fn random_walk() {
+        use rand::prelude::*;
+
+        let num_steps = 100;
+        let num_creators = 3;
+
+        let mut g = Graph::new();
+
+        for i in 0..num_creators {
+            g.add_event(Event::Genesis { creator: i});
+        }
+
+        for eid in num_creators..num_steps {
+            // Chose a random receiver
+            let rnd: usize = random();
+
+            g.add_event( Event::Update {
+                creator: rnd % num_creators,
+                self_parent: eid-1,
+                other_parent: Some(eid),
+                txs: None,
+            });
+
+            //let (t, last_event) = time_fn(|| event.hash());
+            //let last_event = event.hash();
+            //println!("hash took: {}ms", t);
+        }
+    }
