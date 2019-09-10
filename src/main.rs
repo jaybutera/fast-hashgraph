@@ -42,7 +42,8 @@ struct Graph {
     witness: Vec<bool>,
 
     // May be changed after creation so these should be private
-    famous: Vec< Generation<bool> >,
+    //famous: Vec< Generation<bool> >,
+    famous: Vec<bool>,
 
     // Tools for internal tracking and optimization
     generation: usize,
@@ -162,6 +163,21 @@ impl Graph {
                     self.round[eid] = r;
                     self.witness[eid] = false;
                 }
+
+                // Finally check fame for all that may need an update
+                for i in 0..self.allocator.size {
+                    if self.witness[i] == true && self.famous[i] == false
+                    {
+                        self.famous[i] = self.is_famous(i);
+                    }
+                }
+                /*
+                // Prettier version of above
+                self.witness.iter_mut().enumerate()
+                    .filter(|(_,w)| **w == true)
+                    .filter(|(i,_)| self.famous[*i] == false)
+                    .for_each(|(i,_)| self.famous[i] = self.is_famous(i));
+                */
             }
         }
 
@@ -212,9 +228,8 @@ impl Graph {
         let mut validators = HashSet::new();
 
         // TODO: Right now these are not by unique (multiple witnesses to 1 validator possible)
-        self.witness.iter()
-            .filter(|x| **x == true)
-            .enumerate()
+        self.witness.iter().enumerate()
+            .filter(|(_,x)| **x == true)
             .map(|(i,_)| i)
             //.map(|(i,_)| {println!("{}",i); i})
             //.filter(|i| self.round[*i] >= self.latest_round-1 )
@@ -234,9 +249,8 @@ impl Graph {
         let reachable = &self.reachable[*from];
         let mut validators = HashSet::new();
 
-        reachable.iter()
-            .filter(|x| **x == true)
-            .enumerate()
+        reachable.iter().enumerate()
+            .filter(|(_,x)| **x == true)
             .for_each(|(i, _)| {
                 let reach_from_i = *self.reachable[i].get(*to).unwrap_or(&false);
 
@@ -248,24 +262,27 @@ impl Graph {
         validators.len() >= ( 2/3 * self.validators.len() )
     }
 
+    // A witness is famous if witnesses by >2/3 validators in the next round can see it
     fn is_famous(&self, eid: EventId) -> bool {
-        //let event = self.get(eid);
-
         // Once an event is famous it won't become unfamous
-        let fame = &self.famous[eid];
-        if fame.value == true {
+        let fame = self.famous[eid];
+        if fame == true {
             return true;
         }
+        else { // Need to recheck and update fame status
+            let eid_round = self.round[eid];
+            let mut validators = HashSet::new();
 
-        // If it's not famous, check if its generation is current enough to trust the data
-        let cur = self.generation;
-        if fame.generation == cur {
-            // Should always be false
-            return fame.value;
-        } else {
-            // Need to recheck and update fame status
+            // TODO: This may be unsafe because most of the round vec may be garbage from initialization
+            self.round.iter().enumerate()
+                .filter(|(i,_)| self.witness[*i])
+                .filter(|(_,r)| **r == eid_round + 1)
+                .filter(|(i,_)| *self.reachable[*i].get(eid).unwrap_or(&false))
+                .for_each(|(i,_)| {
+                    validators.insert(i);
+                });
 
-            return true;
+            return validators.len() >= ( 2/3 * self.validators.len() )
         }
     }
 
@@ -369,32 +386,28 @@ fn main() {
 4 1 1 1 0
 */
 
-    // Create a single graph as a random walk of events from one creator to the next
-    fn random_walk() {
-        use rand::prelude::*;
+// Create a single graph as a random walk of events from one creator to the next
+fn random_walk() {
+    use rand::prelude::*;
 
-        let num_steps = 100;
-        let num_creators = 3;
+    let num_steps = 100;
+    let num_creators = 3;
 
-        let mut g = Graph::new();
+    let mut g = Graph::new();
 
-        for i in 0..num_creators {
-            g.add_event(Event::Genesis { creator: i});
-        }
-
-        for eid in num_creators..num_steps {
-            // Chose a random receiver
-            let rnd: usize = random();
-
-            g.add_event( Event::Update {
-                creator: rnd % num_creators,
-                self_parent: eid-1,
-                other_parent: Some(eid),
-                txs: None,
-            });
-
-            //let (t, last_event) = time_fn(|| event.hash());
-            //let last_event = event.hash();
-            //println!("hash took: {}ms", t);
-        }
+    for i in 0..num_creators {
+        g.add_event(Event::Genesis { creator: i});
     }
+
+    for eid in num_creators..num_steps {
+        // Chose a random receiver
+        let rnd: usize = random();
+
+        g.add_event( Event::Update {
+            creator: rnd % num_creators,
+            self_parent: eid-1,
+            other_parent: Some(eid),
+            txs: None,
+        });
+    }
+}
