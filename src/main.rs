@@ -22,12 +22,6 @@ impl IndexAllocator {
         self.size += 1;
         i
     }
-
-    /*
-    fn peek(&self) -> usize {
-        self.latest_idx
-    }
-    */
 }
 
 struct Graph {
@@ -118,11 +112,6 @@ impl Graph {
             validators:   HashSet::new(),
         }
     }
-
-    /*
-    fn get(&self, eid: &EventId) -> &Event {
-    }
-    */
 
     fn add_event(&mut self, e: Event) -> EventId {
         let eid = self.allocator.allocate();
@@ -322,41 +311,14 @@ impl Graph {
             }
         }
 
-        //println!("{:?}", reach);
         reach
     }
 }
 
 fn main() {
     let mut g = Graph::new();
-
-    /*
-    let id1 = g.add_event(Event::Genesis { creator: 0});
-    let id2 = g.add_event(Event::Genesis { creator: 1});
-    let id3 = g.add_event(Event::Genesis { creator: 2});
-    let id4 = g.add_event(Event::Update {
-        creator: 1,
-        self_parent: id1,
-        other_parent: Some(id2),
-        txs: Some( Vec::new() ),
-    });
-    let id5 = g.add_event(Event::Update {
-        creator: 0,
-        self_parent: id2,
-        other_parent: Some(id3),
-        txs: Some( Vec::new() ),
-    });
-    let id6 = g.add_event(Event::Update {
-        creator: 2,
-        self_parent: id4,
-        other_parent: Some(id3),
-        txs: Some( Vec::new() ),
-    });
-    */
-
     g.reachability_matrix();
-
-    //random_walk(g);
+    //random_walk();
 }
 
 // Store the reachability data as an adjacency list since it is sparse and only the lower triangle
