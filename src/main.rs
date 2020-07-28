@@ -179,8 +179,8 @@ impl Graph {
     // NOTE: This fn does not check whether the event's parents are valid and stored in the graph,
     // may lead to a panic
     fn reachable_from(&self,
-                        self_parent: &EventId,
-                        other_parent: &Option<EventId>) -> Vec<bool>
+                      self_parent: &EventId,
+                      other_parent: &Option<EventId>) -> Vec<bool>
     {
         let len           = self.allocator.size;
         let mut reachable = Vec::with_capacity(len);
@@ -277,7 +277,7 @@ impl Graph {
     // O(n)
     //O(n^2) Kruskal - Prims - Dijkstra
 
-    // O(n^3) Floyd-Warhsal
+    // O(n^3) Floyd-Warshal
     fn reachability_matrix(&self) -> Vec<Vec<bool>> {
         // TODO: Is there a cleaner way to initialize this array?
         let len = self.allocator.latest_idx;
@@ -313,12 +313,6 @@ impl Graph {
 
         reach
     }
-}
-
-fn main() {
-    let mut g = Graph::new();
-    g.reachability_matrix();
-    //random_walk();
 }
 
 // Store the reachability data as an adjacency list since it is sparse and only the lower triangle
