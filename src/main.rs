@@ -285,7 +285,10 @@ impl Graph {
             return validators.len() >= ( 2/3 * self.validators.len() )
         }
     }
+    // O(n)
+    //O(n^2) Kruskal - Prims - Dijkstra
 
+    // O(n^3) Floyd-Warhsal
     fn reachability_matrix(&self) -> Vec<Vec<bool>> {
         // TODO: Is there a cleaner way to initialize this array?
         let len = self.allocator.latest_idx;
@@ -322,22 +325,6 @@ impl Graph {
         //println!("{:?}", reach);
         reach
     }
-
-    /*
-    fn determine_famous(&self, eid: EventId) -> bool {
-        // TODO: Filter all events to only those with round >= eid's round
-
-        // Compute transtive closure with Floyd-Warshall
-        // An event is famous if 2/3 future witnesses strongly see it.
-    }
-
-    fn is_witness(&self, eid: EventId) -> bool {
-    }
-
-    fn strongly_see(&self, x_id: EventId, y_id: EventId) -> bool {
-        // Kruskal's algorithm
-    }
-    */
 }
 
 fn main() {
@@ -369,7 +356,7 @@ fn main() {
 
     g.reachability_matrix();
 
-    random_walk();
+    //random_walk(g);
 }
 
 // Store the reachability data as an adjacency list since it is sparse and only the lower triangle
@@ -387,27 +374,33 @@ fn main() {
 */
 
 // Create a single graph as a random walk of events from one creator to the next
-fn random_walk() {
-    use rand::prelude::*;
+#[cfg(test)]
+mod tests {
+    use super::{Event, Graph};
 
-    let num_steps = 100;
-    let num_creators = 3;
+    #[test]
+    fn random_walk() {
+        use rand::prelude::*;
 
-    let mut g = Graph::new();
+        let num_steps = 200;
+        let num_creators = 3;
 
-    for i in 0..num_creators {
-        g.add_event(Event::Genesis { creator: i});
-    }
+        let mut g = Graph::new();
 
-    for eid in num_creators..num_steps {
-        // Chose a random receiver
-        let rnd: usize = random();
+        for i in 0..num_creators {
+            g.add_event(Event::Genesis { creator: i});
+        }
 
-        g.add_event( Event::Update {
-            creator: rnd % num_creators,
-            self_parent: eid-1,
-            other_parent: Some(eid),
-            txs: None,
-        });
+        for eid in num_creators..num_steps {
+            // Chose a random receiver
+            let rnd: usize = random();
+
+            g.add_event( Event::Update {
+                creator: rnd % num_creators,
+                self_parent: eid-1,
+                other_parent: Some(eid),
+                txs: None,
+            });
+        }
     }
 }
